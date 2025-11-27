@@ -1,0 +1,56 @@
+$family-primary: '"Nunito", sans-serif';
+$purple: #8a4d76;
+$pink: #fa7c91;
+$brown: #757763;
+$beige-light: #d0d1cd;
+$beige-lighter: #eff0eb;
+$grey-dark: $brown;
+$grey-light: $beige-light;
+$primary: $purple;
+$link: $pink;
+$control-border-width: 2px;
+$input-shadow: none;
+@use "bulma" as *;
+@use "sass:color";
+.hero.is-primary {
+    background-color: $purple !important;
+}
+.button.is-primary {
+    background-color: $purple !important;
+    border-color: $purple !important;
+    &:hover {
+        background-color: color.adjust($purple, $lightness: -10%) !important;
+        border-color: color.adjust($purple, $lightness: -10%) !important;
+    }
+}
+@import url('https://fonts.googleapis.com/css?family=Nunito:400,700');
+body {
+    font-family: $family-primary;
+}
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+.card {
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 3px rgba(10, 10, 10, 0.1);
+    .card-image {
+        img {
+            object-fit: cover;
+            height: 200px;
+            width: 100%;
+        }
+    }
+    .card-content {
+        padding: 1.5rem;
+    }
+}
+@media screen and (max-width: 768px) {
+    .container {
+        padding: 1rem 0.5rem;
+    }
+    .column.is-one-third {
+        width: 100%;
+    }
+}

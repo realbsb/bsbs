@@ -1,0 +1,46 @@
+{
+  "gas-boilers": {
+    "title": "Газовые котлы"
+  },
+  "wall-mounted": {
+    "title": "Настенные",
+    "parent": "gas-boilers",
+    "description": "Настенные газовые котлы для компактного размещения",
+    "exclude_keys": [
+      "installation"
+    ]
+  },
+  "floor-standing": {
+    "title": "Напольные",
+    "parent": "gas-boilers",
+    "description": "Напольные газовые котлы для высокой производительности",
+    "exclude_keys": [
+      "installation"
+    ]
+  },
+  "single-circuit": {
+    "title": "Одноконтурные",
+    "parent": "wall-mounted",
+    "description": "Одноконтурные настенные котлы для отопления",
+    "exclude_keys": [
+      "installation",
+      "boiler_type"
+    ]
+  },
+  "double-circuit": {
+    "title": "Двухконтурные",
+    "parent": "wall-mounted",
+    "exclude_keys": [
+      "installation",
+      "boiler_type"
+    ]
+  },
+  "condensing": {
+    "title": "Конденсационные",
+    "parent": "gas-boilers"
+  },
+  "traditional": {
+    "title": "Традиционные",
+    "parent": "gas-boilers"
+  }
+}
