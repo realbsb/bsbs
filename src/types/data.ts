@@ -96,3 +96,4 @@ export function getCategoryFullPath(category: Category, allCategories: Record<st
   return `${parentCategory.slug}/${category.slug}`;
 }
 
+export type Categories = Record<string, Category>;

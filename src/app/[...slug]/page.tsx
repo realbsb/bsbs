@@ -1,15 +1,14 @@
-'use client'
-
-import { useState, useMemo } from 'react'
+// src/app/[...slug]/page.tsx
+import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { notFound } from 'next/navigation'
 import { dataService } from '@/lib/dataService'
 import { ImageService } from '@/lib/imageService'
-import ProductFilter from '@/components/ProductFilter'
-import AddToCartButton from '@/components/AddToCartButton'
+import ClientCategoryPage from './ClientCategoryPage'
+import type { AutoFilterConfig, Product, Category } from '@/types/data'
 import FavoriteButton from '@/components/FavoriteButton'
-import type { ActiveFilters } from '@/types/data'
+import AddToCartButton from '@/components/AddToCartButton'
+import { Categories } from '@/types/data'
 
 interface PageProps {
     params: {
@@ -17,136 +16,34 @@ interface PageProps {
     }
 }
 
-// Клиентский компонент для категории с фильтрацией
-function CategoryPage({ slug }: { slug: string }) {
-    const [activeFilters, setActiveFilters] = useState<ActiveFilters>({})
-
+async function preloadCategoryData(slug: string): Promise<{
+    category: Category;
+    products: Product[];
+    markdown: string;
+    filterConfig: AutoFilterConfig;
+    thumbnails: string[][];
+} | null> {
     const categories = dataService.getCategories()
-    const category = categories[slug]
-    const categoryProducts = dataService.getProductsByCategory(slug)
-    const markdownContent = dataService.getPageMarkdown([slug])
+		const category: Category | undefined = categories[slug as keyof Categories];
+    if (!category) return null
+
+    const products = dataService.getProductsByCategory(slug)
+    const markdown = await dataService.getPageMarkdown([slug])
     const filterConfig = dataService.getFilterConfigForCategory(slug)
+    const thumbnails = products.map(p => ImageService.getProductThumbnails(p, slug))
 
-    // Применяем фильтрацию
-    const filteredProducts = useMemo(() => {
-        if (Object.keys(activeFilters).length === 0) {
-            return categoryProducts
-        }
-        return dataService.getFilteredProducts(slug, activeFilters)
-    }, [categoryProducts, activeFilters, slug])
-
-    if (!category) {
-        return notFound()
-    }
-
-    return (
-        <div className="container">
-            <h1 className="title">{category.title}</h1>
-            {category.description && <p className="subtitle">{category.description}</p>}
-
-            {markdownContent && (
-                <div
-                    className="content mt-5"
-                    dangerouslySetInnerHTML={{ __html: markdownContent }}
-                />
-            )}
-
-            <div className="columns">
-                {/* Боковая панель с фильтрами */}
-                <div className="column is-one-quarter">
-                    <ProductFilter
-                        filterConfig={filterConfig}
-                        onFilterChange={setActiveFilters}
-                    />
-                </div>
-
-                {/* Список товаров */}
-                <div className="column">
-                    {filteredProducts.length === 0 ? (
-                        <div className="notification is-warning">
-                            {Object.keys(activeFilters).length > 0
-                                ? 'По выбранным фильтрам товаров не найдено'
-                                : 'В этой категории пока нет товаров'
-                            }
-                        </div>
-                    ) : (
-                        <div className="columns is-multiline">
-                            {filteredProducts.map(product => {
-                                const thumbnails = ImageService.getProductThumbnails(product, slug)
-
-                                return (
-                                    <div key={product.id} className="column is-one-third">
-                                        <div className="card">
-                                            <div className="card-image">
-                                                <div className="card-image-header">
-                                                    <FavoriteButton
-                                                        productId={product.id}
-                                                        className="is-pulled-right m-2"
-                                                        size="small"
-                                                    />
-                                                </div>
-                                                {thumbnails.length > 0 && (
-                                                    <figure className="image is-4by3">
-                                                        <Image
-                                                            src={thumbnails[0]}
-                                                            alt={product.title}
-                                                            width={400}
-                                                            height={300}
-                                                            style={{ objectFit: 'cover' }}
-                                                        />
-                                                    </figure>
-                                                )}
-                                            </div>
-                                            <div className="card-content">
-                                                <h3 className="title is-5">{product.title}</h3>
-                                                {product.badge && (
-                                                    <span className="tag is-primary">{product.badge}</span>
-                                                )}
-                                                <p className="subtitle is-6">{product.desc}</p>
-                                                <div className="content">
-                                                    {typeof product.power_kw === 'number' && (
-                                                        <p><strong>Мощность:</strong> {product.power_kw} кВт</p>
-                                                    )}
-                                                    {typeof product.area_max === 'number' && (
-                                                        <p><strong>Площадь:</strong> до {product.area_max} м²</p>
-                                                    )}
-                                                </div>
-                                                <div className="buttons">
-                                                    <Link
-                                                        href={`/${slug}/${product.slug}`}
-                                                        className="button is-primary is-outlined"
-                                                    >
-                                                        Подробнее
-                                                    </Link>
-                                                    <AddToCartButton
-                                                        productId={product.id}
-                                                        className="is-small"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    )
+    return { category, products, markdown, filterConfig, thumbnails }
 }
 
-// Серверный компонент для товара
 function ProductPage({ categorySlug, productSlug }: { categorySlug: string; productSlug: string }) {
     const categories = dataService.getCategories()
-    const category = categories[categorySlug]
+		const category: Category | undefined = categories[categorySlug as keyof Categories];
     const product = dataService.getProductBySlug(productSlug)
 
     if (!category || !product) {
         return notFound()
     }
 
-    // Проверяем, что товар принадлежит категории
     const productInCategory = dataService.getProductsByCategory(categorySlug)
         .some(p => p.slug === productSlug)
 
@@ -197,7 +94,7 @@ function ProductPage({ categorySlug, productSlug }: { categorySlug: string; prod
                     <div className="content">
                         <h4>Характеристики:</h4>
                         <ul>
-                            {Object.entries(product).map(([key, value]) => {
+                            {Object.entries(product as Partial<Product>).map(([key, value]) => {
                                 if (['id', 'slug', 'title', 'desc', 'badge', 'img', 'categories'].includes(key)) return null
                                 if (value === undefined || value === null) return null
                                 return (
@@ -229,26 +126,20 @@ function ProductPage({ categorySlug, productSlug }: { categorySlug: string; prod
     )
 }
 
-// Главный компонент страницы
-export default function DynamicPage({ params }: PageProps) {
+export default async function DynamicPage({ params }: PageProps) {
     const { slug } = params
 
     if (!slug || slug.length === 0) {
         return notFound()
     }
 
-    // Определяем тип страницы по количеству сегментов в slug
     if (slug.length === 1) {
-        // Страница категории
-        return <CategoryPage slug={slug[0]} />
+        const data = await preloadCategoryData(slug[0])
+        if (!data) return notFound()
+        return <ClientCategoryPage initialData={data} slug={slug[0]} />
     } else if (slug.length === 2) {
-        // Страница товара в категории
-        return <ProductPage
-            categorySlug={slug[0]}
-            productSlug={slug[1]}
-        />
+        return <ProductPage categorySlug={slug[0]} productSlug={slug[1]} />
     } else {
-        // Фильтры или неизвестный путь
         return notFound()
     }
 }
@@ -259,12 +150,10 @@ export async function generateStaticParams() {
 
     const paths: { slug: string[] }[] = []
 
-    // Генерируем пути для категорий
     Object.keys(categories).forEach(categorySlug => {
         paths.push({ slug: [categorySlug] })
     })
 
-    // Генерируем пути для товаров
     products.forEach(product => {
         if (product.categories && product.slug) {
             const categoriesArray = Array.isArray(product.categories) ? product.categories : [product.categories]

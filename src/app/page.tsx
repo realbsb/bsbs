@@ -1,66 +1,71 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+// src/app/page.tsx
+import Link from 'next/link'
+import { dataService } from '@/lib/dataService'
+import type { Categories, Category } from '@/types/data'
 
-export default function Home() {
+interface CategoryTreeProps {
+  categories: Categories
+  parent?: string | null
+  level?: number
+}
+
+function CategoryTree({ categories, parent = null, level = 0 }: CategoryTreeProps) {
+  const children = Object.entries(categories).filter(([, cat]) => {
+    if (parent === null) return !cat.parent
+    if (Array.isArray(cat.parent)) return cat.parent.includes(parent)
+    return cat.parent === parent
+  })
+
+  if (children.length === 0) return null
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <ul className={`menu-list ${level > 0 ? 'ml-4' : ''}`}>
+      {children.map(([slug, cat]) => (
+        <li key={slug}>
+          <Link href={`/${slug}`}>{cat.title}</Link>
+          <CategoryTree categories={categories} parent={slug} level={level + 1} />
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export default async function HomePage() {
+  const categories = dataService.getCategories()
+  const markdownContent = await dataService.getPageMarkdown([]) || '<h1>Добро пожаловать в наш магазин!</h1><p>Здесь вы найдете лучшие товары для отопления и не только.</p>'
+
+  return (
+    <div>
+      <section className="hero is-primary is-medium">
+        <div className="hero-body">
+          <div className="container">
+            <h1 className="title">Добро пожаловать!</h1>
+            <h2 className="subtitle">Отопительное оборудование и аксессуары</h2>
+          </div>
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </section>
+
+      <section className="section">
+        <div className="container">
+          <div className="content" dangerouslySetInnerHTML={{ __html: markdownContent }} />
         </div>
-      </main>
+      </section>
+
+      <section className="section">
+        <div className="container">
+          <h2 className="title is-4">Категории товаров</h2>
+          <div className="menu">
+            <CategoryTree categories={categories} />
+          </div>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="container">
+          <h2 className="title is-4">Акционные товары</h2>
+          <p>Здесь будут акционные товары из actionPrices.json (добавим позже: каррусель/список с ImageService, ценами).</p>
+        </div>
+      </section>
     </div>
-  );
+  )
 }

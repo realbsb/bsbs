@@ -1,29 +1,36 @@
-import { existsSync, readFileSync } from 'fs';
-import { marked } from 'marked';
+// src/lib/dataService.ts
+'use server';
+
+import { readFileSync } from 'fs';
 import path from 'path';
-import type { AutoFilterConfig, Brand, Category, Prices, Product, FilterKeys, ActiveFilters } from '@/types/data';
-import { FilterService } from './filterService';
+import { marked } from 'marked';
+import type { Product, Categories, Brand, Prices, FilterKeys, AutoFilterConfig, ActiveFilters, Category } from '@/types/data';
+import {FilterService} from './filterService';
+import fs from 'fs/promises';
 
 const dataPath = path.join(process.cwd(), 'src', 'data');
 
-// Загрузка JSON файлов
-export function loadJSON<T>(filename: string): T {
-    const filePath = path.join(dataPath, `${filename}.json`);
-    try {
-        const fileContents = readFileSync(filePath, 'utf8');
-        return JSON.parse(fileContents);
-    } catch (error) {
-        console.error(`Error loading ${filename}:`, error);
-        return {} as T;
-    }
+function loadJSON<T extends object>(filename: string): T {
+	const filePath = path.join(dataPath, `${filename}.json`);
+	try {
+		const fileContents = readFileSync(filePath, 'utf8');
+		return JSON.parse(fileContents) as T;
+	} catch (error) {
+		console.error(`Error loading ${filename}:`, error);
+		return {} as T;
+	}
 }
 
-// Загрузка Markdown
-export function loadMarkdown(filePath: string): string {
-    if (!existsSync(filePath)) return '';
 
+// Async loadMarkdown
+export async function loadMarkdown(filePath: string): Promise<string> {
     try {
-        const fileContents = readFileSync(filePath, 'utf8');
+        await fs.access(filePath); // Замена existsSync
+    } catch {
+        return '';
+    }
+    try {
+        const fileContents = await fs.readFile(filePath, 'utf8');
         return marked.parse(fileContents) as string;
     } catch (error) {
         console.error(`Error loading markdown ${filePath}:`, error);
@@ -31,117 +38,85 @@ export function loadMarkdown(filePath: string): string {
     }
 }
 
-// Получение Markdown контента для страницы
-export function getPageMarkdown(slug: string[]): string {
-    // Для Hugo-подобной структуры с _index.md
-
-    // 1. Проверяем _index.md для категории
-    const categoryPath = slug.join('/');
-    const categoryIndexPath = path.join(dataPath, categoryPath, '_index.md');
-    if (existsSync(categoryIndexPath)) {
-        return loadMarkdown(categoryIndexPath);
+// Async getPageMarkdown с home в начале
+export async function getPageMarkdown(slug: string[]): Promise<string> {
+    if (slug.length === 0) {
+        const homeIndexPath = path.join(dataPath, '_index.md');
+        return await loadMarkdown(homeIndexPath);
     }
 
-    // 2. Для товаров: ищем файл товара в папке категории
+    const categoryPath = slug.join('/');
+    const categoryIndexPath = path.join(dataPath, categoryPath, '_index.md');
+    let content = await loadMarkdown(categoryIndexPath);
+    if (content) return content;
+
     if (slug.length >= 2) {
         const categoryPathForProduct = slug.slice(0, -1).join('/');
         const productSlug = slug[slug.length - 1];
         const productMdPath = path.join(dataPath, categoryPathForProduct, `${productSlug}.md`);
-        if (existsSync(productMdPath)) {
-            return loadMarkdown(productMdPath);
-        }
+        content = await loadMarkdown(productMdPath);
+        if (content) return content;
     }
 
-    // 3. Старая логика для фильтров
     const fullMdPath = path.join(dataPath, 'filter', slug.join('_') + '.full.md');
-    if (existsSync(fullMdPath)) {
-        return loadMarkdown(fullMdPath);
-    }
+    content = await loadMarkdown(fullMdPath);
+    if (content) return content;
 
     const normalMdPath = path.join(dataPath, 'filter', slug.join('_') + '.md');
-    if (existsSync(normalMdPath)) {
-        return loadMarkdown(normalMdPath);
-    }
+    content = await loadMarkdown(normalMdPath);
+    if (content) return content;
 
-    // 4. Общий fallback
     const mdPath = path.join(dataPath, ...slug) + '.md';
-    return loadMarkdown(mdPath);
+    return await loadMarkdown(mdPath);
 }
 
-// Хелпер для проверки принадлежности товара к категории
 function productInCategory(product: Product, categorySlug: string): boolean {
-    if (Array.isArray(product.categories)) {
-        return product.categories.includes(categorySlug);
-    } else {
-        return product.categories === categorySlug;
-    }
+	if (!product.categories) return false;
+	return Array.isArray(product.categories)
+		? product.categories.includes(categorySlug)
+		: product.categories === categorySlug;
 }
 
-// Сервисы данных
 export const dataService = {
-    // Основные данные
-    getCategories: (): Record<string, Category> => loadJSON<Record<string, Category>>('categories'),
-    getProducts: (): Product[] => loadJSON<Product[]>('products'),
-    getBrands: (): Brand => loadJSON<Brand>('brands'),
-    getPrices: (): Prices => loadJSON<Prices>('prices'),
-    getActionPrices: (): Prices => loadJSON<Prices>('actionPrices'),
-    getFilterKeys: (): FilterKeys => loadJSON<FilterKeys>('keys'),
-
-    // Markdown контент
-    getBrandMarkdown: (brandSlug: string): string => {
-        return loadMarkdown(path.join(dataPath, 'brand', `${brandSlug}.md`));
-    },
-
-    getPageMarkdown,
-
-    // Получение товара по slug
-    getProductBySlug: (slug: string): Product | undefined => {
-        const products = loadJSON<Product[]>('products');
-        return products.find(p => p.slug === slug);
-    },
-
-    // Получение товаров категории
-    getProductsByCategory: (categorySlug: string): Product[] => {
-        const products = loadJSON<Product[]>('products');
-        return products.filter(p => productInCategory(p, categorySlug));
-    },
-
-    getFilterConfigForCategory: (categorySlug: string): AutoFilterConfig => {
-        const categories = loadJSON<Record<string, Category>>('categories');
-        const products = loadJSON<Product[]>('products');
-        const filterKeys = loadJSON<FilterKeys>('keys');
-
-        const category = categories[categorySlug];
-
-        // Добавляем проверку на существование категории
-        if (!category) {
-            console.warn(`Category ${categorySlug} not found`);
-            return {};
-        }
-
-        const categoryProducts = products.filter(p => productInCategory(p, categorySlug));
-
-        // Добавляем проверку на пустой массив товаров
-        if (categoryProducts.length === 0) {
-            console.warn(`No products found for category ${categorySlug}`);
-            return {};
-        }
-
-        const excludeKeys = category.exclude_keys || [];
-
-        return FilterService.generateFilterConfig(categoryProducts, filterKeys, excludeKeys);
-    },
-
-    // Фильтрация товаров
-    getFilteredProducts: (categorySlug: string, activeFilters: ActiveFilters): Product[] => {
-        const products = loadJSON<Product[]>('products');
-        const categoryProducts = products.filter(p => productInCategory(p, categorySlug));
-
-        // Если нет товаров в категории или нет активных фильтров
-        if (categoryProducts.length === 0 || Object.keys(activeFilters).length === 0) {
-            return categoryProducts;
-        }
-
-        return FilterService.filterProducts(categoryProducts, activeFilters);
-    }
+	getCategories: (): Categories => loadJSON<Categories>('categories'),
+	getProducts: (): Product[] => loadJSON<Product[]>('products'),
+	getBrands: (): Brand => loadJSON<Brand>('brands'),
+	getPrices: (): Prices => loadJSON<Prices>('prices'),
+	getActionPrices: (): Prices => loadJSON<Prices>('actionPrices'),
+	getFilterKeys: (): FilterKeys => loadJSON<FilterKeys>('keys'),
+	getBrandMarkdown: async (brandSlug: string): Promise<string> => await loadMarkdown(path.join(dataPath, 'brand', `${brandSlug}.md`)),
+	getPageMarkdown,
+	getProductBySlug: (slug: string): Product | undefined => {
+		const products = loadJSON<Product[]>('products');
+		return products.find(p => p.slug === slug);
+	},
+	getProductsByCategory: (categorySlug: string): Product[] => {
+		const products = loadJSON<Product[]>('products');
+		return products.filter(p => productInCategory(p, categorySlug));
+	},
+	getFilterConfigForCategory: (categorySlug: string): AutoFilterConfig => {
+		const categories = loadJSON<Categories>('categories');
+		const category: Category | undefined = categories[categorySlug];
+		if (!category) {
+			console.warn(`Category ${categorySlug} not found`);
+			return {};
+		}
+		const products = loadJSON<Product[]>('products');
+		const categoryProducts = products.filter(p => productInCategory(p, categorySlug));
+		if (categoryProducts.length === 0) {
+			console.warn(`No products found for category ${categorySlug}`);
+			return {};
+		}
+		const filterKeys = loadJSON<FilterKeys>('keys');
+		const excludeKeys = category.exclude_keys ?? [];
+		return FilterService.generateFilterConfig(categoryProducts, filterKeys, excludeKeys);
+	},
+	getFilteredProducts: (categorySlug: string, activeFilters: ActiveFilters): Product[] => {
+		const products = loadJSON<Product[]>('products');
+		const categoryProducts = products.filter(p => productInCategory(p, categorySlug));
+		if (categoryProducts.length === 0 || Object.keys(activeFilters).length === 0) {
+			return categoryProducts;
+		}
+		return FilterService.filterProducts(categoryProducts, activeFilters);
+	}
 };
